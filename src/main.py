@@ -1,12 +1,49 @@
+#!/usr/bin/env python3
+"""
+Purify-G++ experimental code.
+This script implements three experiments:
+  1. Adaptive Classifier Guidance Strength.
+  2. Joint Multi-Objective Optimization with Dynamic Loss Scheduling.
+  3. Adaptive Noise Injection Controlled by Classifier Guidance.
+  
+Each experiment uses a dummy diffusion model and classifier implemented in PyTorch.
+Plots are generated and saved as .pdf files.
+"""
+
 import torch
-import cv2
+import torch.nn as nn
+import torch.nn.functional as F
 import numpy as np
-import os
-from PIL import Image
 import matplotlib.pyplot as plt
-from preprocess import FakeSAM, FakeStableDiffusionEncoder, segment_image, subtle_inpainting, pil_to_tensor, get_latent_representation, latent_feature_loss
+import seaborn as sns
+import os
 from train import train_joint_loss_optimization
-from evaluate import evaluate_distributed_poisoning
+from evaluate import evaluate_adaptive_guidance
+from preprocess import preprocess_data
+
+class DummyDiffusionModel(nn.Module):
+    def __init__(self):
+        super(DummyDiffusionModel, self).__init__()
+        self.fc = nn.Linear(32*32*3, 32*32*3)
+    
+    def forward(self, x, timestep):
+        batch_size = x.size(0)
+        x_flat = x.view(batch_size, -1)
+        update = self.fc(x_flat)
+        update = update.view_as(x)
+        factor = 1.0 / (1.0 + timestep)
+        return factor * update
+
+class DummyClassifier(nn.Module):
+    def __init__(self, num_classes=10):
+        super(DummyClassifier, self).__init__()
+        self.fc = nn.Linear(32*32*3, num_classes)
+    
+    def forward(self, x):
+        batch_size = x.size(0)
+        x_flat = x.view(batch_size, -1)
+        logits = self.fc(x_flat)
+        return logits
 
 def ensure_output_directory():
     """Ensure the output directory exists for saving PDF files"""
@@ -33,154 +70,253 @@ def ensure_output_directory():
     print(f"⚠ Using fallback output directory: {os.path.abspath(fallback_path)}")
     return fallback_path
 
-def experiment_dual_level_poisoning():
-    print("\n" + "="*80)
-    print("EXPERIMENT 1: DUAL-LEVEL POISONING GENERATION PIPELINE")
-    print("="*80)
-    print("📋 Objective: Implement pixel-level semantic encoding + latent watermarking")
-    print("🔧 Components: FakeSAM segmentation, subtle inpainting, latent extraction")
-    print("📊 Metrics: Latent feature loss between original and modified images")
-    print("-"*80)
-    
-    output_dir = ensure_output_directory()
-    
-    print("🚀 Initializing models...")
-    sam_model = FakeSAM()
-    encoder_model = FakeStableDiffusionEncoder(latent_dim=128)
-    print("✓ FakeSAM segmentation model initialized")
-    print("✓ FakeStableDiffusionEncoder initialized (latent_dim=128)")
-    
-    print("\n📸 Generating synthetic copyright image...")
-    image = np.full((64, 64, 3), 200, dtype=np.uint8)
-    cv2.rectangle(image, (16, 16), (48, 48), (50, 50, 50), -1)
-    print(f"✓ Created synthetic image: {image.shape} with central rectangle")
-    print(f"  - Background color: RGB(200,200,200)")
-    print(f"  - Rectangle region: (16,16) to (48,48) in RGB(50,50,50)")
-    
-    print("\n📊 Saving original image visualization...")
-    plt.figure(figsize=(4,4))
-    plt.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
-    plt.title("Original Copyright Image")
-    plt.axis("off")
-    original_path = os.path.join(output_dir, "poisoning_images_original.pdf")
-    plt.savefig(original_path, bbox_inches="tight", dpi=300)
-    plt.close()
-    print(f"✓ Original image saved: {original_path}")
-    
-    print("\n🎯 Performing image segmentation...")
-    temp_path = "temp_image.jpg"
-    cv2.imwrite(temp_path, image)
-    image_loaded, mask = segment_image(temp_path, sam_model)
-    mask_area = np.sum(mask > 0)
-    total_area = mask.shape[0] * mask.shape[1]
-    print(f"✓ Segmentation completed")
-    print(f"  - Mask area: {mask_area} pixels ({mask_area/total_area*100:.1f}% of image)")
-    print(f"  - Mask shape: {mask.shape}")
-    
-    print("\n🖌️ Applying subtle inpainting for stealth modification...")
-    modified_image = subtle_inpainting(image_loaded, mask, inpaint_radius=3)
-    
-    diff = np.abs(image_loaded.astype(float) - modified_image.astype(float))
-    mean_diff = np.mean(diff)
-    max_diff = np.max(diff)
-    modified_pixels = np.sum(diff > 0)
-    print(f"✓ Inpainting completed with radius=3")
-    print(f"  - Mean pixel difference: {mean_diff:.2f}")
-    print(f"  - Max pixel difference: {max_diff:.2f}")
-    print(f"  - Modified pixels: {modified_pixels} ({modified_pixels/total_area*100:.1f}%)")
-    
-    print("\n📊 Saving modified image visualization...")
-    plt.figure(figsize=(4,4))
-    plt.imshow(cv2.cvtColor(modified_image, cv2.COLOR_BGR2RGB))
-    plt.title("Modified Image (Subtle Inpainting)")
-    plt.axis("off")
-    modified_path = os.path.join(output_dir, "poisoning_images_modified.pdf")
-    plt.savefig(modified_path, bbox_inches="tight", dpi=300)
-    plt.close()
-    print(f"✓ Modified image saved: {modified_path}")
-    
-    print("\n🧠 Extracting latent representations...")
-    pil_img = Image.fromarray(cv2.cvtColor(modified_image, cv2.COLOR_BGR2RGB))
-    img_tensor = pil_to_tensor(pil_img).unsqueeze(0)
-    latent_modified = get_latent_representation(img_tensor, encoder_model)
-    print(f"✓ Modified image latent shape: {latent_modified.shape}")
-    
-    pil_original = Image.fromarray(cv2.cvtColor(image_loaded, cv2.COLOR_BGR2RGB))
-    orig_tensor = pil_to_tensor(pil_original).unsqueeze(0)
-    latent_original = get_latent_representation(orig_tensor, encoder_model)
-    print(f"✓ Original image latent shape: {latent_original.shape}")
-    
-    print("\n📈 Computing latent feature similarity...")
-    loss_val = latent_feature_loss(latent_modified, latent_original)
-    print(f"✓ Latent feature loss (1 - cosine similarity): {loss_val.item():.8f}")
-    
-    if loss_val.item() < 0.001:
-        print("🎉 SUCCESS: Very low latent loss indicates successful stealth modification!")
-    elif loss_val.item() < 0.01:
-        print("✅ GOOD: Low latent loss shows effective latent watermarking")
-    else:
-        print("⚠️  WARNING: High latent loss may indicate detectable modifications")
-    
-    print("\n" + "="*80)
-    print("EXPERIMENT 1 COMPLETED SUCCESSFULLY")
-    print("="*80)
-    
-    return {"latent_loss": loss_val.item(), "output_dir": output_dir}
+torch.manual_seed(42)
+np.random.seed(42)
 
-def test_experiments():
-    print("\n" + "🧪" + " "*30 + "RUNNING LEB EXPERIMENT SUITE" + " "*30 + "🧪")
-    print("="*90)
-    print("🎯 Testing all three components of Latent-Enmeshment Backdoor attack")
-    print("⏱️  Estimated runtime: ~30 seconds for quick validation")
-    print("="*90)
+def adaptive_weight_linear(confidence, k=1.0):
+    return k * confidence
+
+def adaptive_weight_exponential(confidence, alpha=1.0, threshold=0.5):
+    return torch.exp(alpha * (confidence - threshold))
+
+def adaptive_weight_threshold(confidence, threshold=0.7, weight=1.0):
+    return weight if confidence > threshold else 0.0
+
+def run_adaptive_guidance_step(x, timestep, diffusion_model, classifier, weighting_fn):
+    """
+    One reverse diffusion step with adaptive classifier guidance.
+    """
+    x = x.clone().detach().requires_grad_(True)
     
-    results1 = experiment_dual_level_poisoning()
-    results2 = train_joint_loss_optimization()
-    results3 = evaluate_distributed_poisoning()
+    diffusion_update = diffusion_model(x, timestep)
     
-    print("\n" + "📊" + " "*35 + "EXPERIMENT RESULTS SUMMARY" + " "*35 + "📊")
-    print("="*90)
-    print(f"🔬 Experiment 1 (Dual-level Poisoning)")
-    print(f"   └─ Latent Loss: {results1['latent_loss']:.8f}")
-    print(f"   └─ Status: {'✅ PASSED' if results1['latent_loss'] < 0.01 else '⚠️ WARNING'}")
+    logits = classifier(x)
+    prob = F.softmax(logits, dim=1)
+    confidence = prob.max(dim=1)[0]
     
-    print(f"\n🎯 Experiment 2 (Joint Loss Optimization)")
-    final_loss = results2.get('final_loss', 0.0)
-    print(f"   └─ Final Training Loss: {final_loss:.6f}")
-    print(f"   └─ Status: {'✅ CONVERGED' if final_loss and final_loss < 1.0 else '⚠️ HIGH LOSS'}")
+    predicted_label = logits.argmax(dim=1)
+    classifier_loss = F.cross_entropy(logits, predicted_label)
     
-    print(f"\n🔄 Experiment 3 (Distributed Poisoning Robustness)")
-    print(f"   └─ Trigger Activation Loss: {results3['trigger_loss']:.8f}")
-    print(f"   └─ Robustness Ratios: {len(results3['similarity_losses'])} tested")
-    print(f"   └─ Status: {'✅ ROBUST' if results3['trigger_loss'] < 0.01 else '⚠️ UNSTABLE'}")
+    grad_classifier = torch.autograd.grad(classifier_loss, x, retain_graph=True)[0]
     
-    print("\n" + "🎉" + " "*30 + "ALL EXPERIMENTS COMPLETED" + " "*30 + "🎉")
-    print("="*90)
-    return results1, results2, results3
+    weight = weighting_fn(confidence.mean())
+    
+    steered_update = diffusion_update - weight * grad_classifier
+    x_updated = x.detach() + steered_update
+    return x_updated
+
+def run_adaptive_guidance_purification(x_initial, diffusion_model, classifier, weighting_fn, timesteps=5):
+    x = x_initial.clone()
+    confidence_evolution = []
+    for t in range(timesteps, 0, -1):
+        with torch.no_grad():
+            logits = classifier(x)
+            conf = F.softmax(logits, dim=1).max(dim=1)[0].mean().item()
+            confidence_evolution.append(conf)
+        x = run_adaptive_guidance_step(x, t, diffusion_model, classifier, weighting_fn)
+    return x, confidence_evolution
+
+def experiment1():
+    print("Experiment 1: Adaptive Classifier Guidance Strength")
+    diffusion_model = DummyDiffusionModel()
+    classifier = DummyClassifier(num_classes=10)
+
+    x_initial = torch.randn(10, 3, 32, 32)
+
+    candidates = [
+        ('linear', adaptive_weight_linear),
+        ('exponential', adaptive_weight_exponential),
+        ('threshold', adaptive_weight_threshold)
+    ]
+    results = dict()
+
+    timesteps = 5
+    for name, func in candidates:
+        print("Running candidate weighting function:", name)
+        x_final, conf_evo = run_adaptive_guidance_purification(x_initial, diffusion_model, classifier, func, timesteps)
+        results[name] = conf_evo
+        print("Final mean classifier confidence (%s): %.4f" % (name, conf_evo[-1]))
+
+    output_dir = ensure_output_directory()
+    plt.figure(figsize=(6,4))
+    for name, conf_evo in results.items():
+        timesteps_list = list(range(timesteps, 0, -1))
+        plt.plot(timesteps_list, conf_evo, marker='o', label=name)
+    plt.xlabel("Timestep")
+    plt.ylabel("Mean Classifier Confidence")
+    plt.title("Classifier Confidence Evolution for Adaptive Guidance")
+    plt.legend()
+    plt.savefig(os.path.join(output_dir, "classifier_confidence.pdf"), bbox_inches="tight")
+    plt.close()
+    print("Experiment 1 plot saved as 'classifier_confidence.pdf'\n")
+
+def dynamic_loss_weight(confidence, base_weight=0.5, scale=1.0):
+    return base_weight + scale * (1 - confidence.mean())
+
+def joint_loss_update(x, timestep, diffusion_model, classifier, static_weight=None):
+    x = x.clone().detach().requires_grad_(True)
+    noise_pred = diffusion_model(x, timestep)
+    target_noise = torch.zeros_like(noise_pred)
+    denoising_loss = F.mse_loss(noise_pred, target_noise)
+
+    logits = classifier(x)
+    predicted_label = logits.argmax(dim=1)
+    classifier_loss = F.cross_entropy(logits, predicted_label)
+
+    confidence = F.softmax(logits, dim=1).max(dim=1)[0]
+    
+    if static_weight is not None:
+        guidance_weight = static_weight
+    else:
+        guidance_weight = dynamic_loss_weight(confidence)
+    
+    joint_loss = denoising_loss + guidance_weight * classifier_loss
+    joint_loss.backward()
+    with torch.no_grad():
+        grad_update = x.grad
+        step_size = 0.1
+        x_updated = x - step_size * grad_update
+    return x_updated.detach(), denoising_loss.item(), classifier_loss.item(), guidance_weight
+
+def run_joint_optimization_purification(x_initial, diffusion_model, classifier, timesteps=5, use_static_weight=False):
+    x = x_initial.clone()
+    loss_logs = []
+    for t in range(timesteps, 0, -1):
+        static_weight = 0.5 if use_static_weight else None
+        x, denoise_loss, cls_loss, applied_weight = joint_loss_update(x, t, diffusion_model, classifier, static_weight)
+        loss_logs.append((denoise_loss, cls_loss, applied_weight))
+    return x, loss_logs
+
+def experiment2():
+    print("Experiment 2: Joint Multi-Objective Optimization with Dynamic Loss Scheduling")
+    diffusion_model = DummyDiffusionModel()
+    classifier = DummyClassifier(num_classes=10)
+    x_initial = torch.randn(10, 3, 32, 32)
+
+    print("Running joint optimization with STATIC weight")
+    _, loss_logs_static = run_joint_optimization_purification(x_initial, diffusion_model, classifier, timesteps=5, use_static_weight=True)
+    print("Running joint optimization with DYNAMIC weight")
+    _, loss_logs_dynamic = run_joint_optimization_purification(x_initial, diffusion_model, classifier, timesteps=5, use_static_weight=False)
+
+    timesteps_list = list(range(5, 0, -1))
+    static_denoise = [log[0] for log in loss_logs_static]
+    static_classifier = [log[1] for log in loss_logs_static]
+    dynamic_denoise = [log[0] for log in loss_logs_dynamic]
+    dynamic_classifier = [log[1] for log in loss_logs_dynamic]
+
+    output_dir = ensure_output_directory()
+    plt.figure(figsize=(6,4))
+    plt.plot(timesteps_list, static_denoise, marker='o', label="Denoising Loss")
+    plt.plot(timesteps_list, static_classifier, marker='x', label="Classifier Loss")
+    plt.xlabel("Timestep")
+    plt.ylabel("Loss")
+    plt.title("Joint Loss (Static Weight)")
+    plt.legend()
+    plt.savefig(os.path.join(output_dir, "joint_loss_static.pdf"), bbox_inches="tight")
+    plt.close()
+    print("Static joint loss plot saved as 'joint_loss_static.pdf'")
+
+    plt.figure(figsize=(6,4))
+    plt.plot(timesteps_list, dynamic_denoise, marker='o', label="Denoising Loss")
+    plt.plot(timesteps_list, dynamic_classifier, marker='x', label="Classifier Loss")
+    plt.xlabel("Timestep")
+    plt.ylabel("Loss")
+    plt.title("Joint Loss (Dynamic Weight)")
+    plt.legend()
+    plt.savefig(os.path.join(output_dir, "joint_loss_dynamic.pdf"), bbox_inches="tight")
+    plt.close()
+    print("Dynamic joint loss plot saved as 'joint_loss_dynamic.pdf'\n")
+
+def compute_gradient_norm(x, classifier, timestep):
+    x = x.clone().detach().requires_grad_(True)
+    logits = classifier(x)
+    predicted_label = logits.argmax(dim=1)
+    loss = F.cross_entropy(logits, predicted_label)
+    grad = torch.autograd.grad(loss, x, retain_graph=True)[0]
+    grad_norm = grad.view(grad.size(0), -1).norm(p=2, dim=1).mean()
+    return grad_norm
+
+def noise_injection_factor(timestep, grad_norm, linear_coef=0.01, exp_coef=0.05):
+    return torch.exp(-exp_coef * torch.tensor(timestep, dtype=torch.float32)) * (1 + exp_coef * grad_norm)
+
+def adaptive_noise_injection_step(x, timestep, diffusion_model, classifier):
+    update = diffusion_model(x, timestep)
+    
+    grad_norm = compute_gradient_norm(x, classifier, timestep)
+    
+    noise_factor = noise_injection_factor(timestep, grad_norm)
+    
+    noise = torch.randn_like(x) * noise_factor
+    x_updated = x + update + noise
+    return x_updated.detach(), noise_factor.item()
+
+def run_adaptive_noise_purification(x_initial, diffusion_model, classifier, timesteps=5):
+    x = x_initial.clone()
+    noise_factor_log = []
+    for t in range(timesteps, 0, -1):
+        x, nf = adaptive_noise_injection_step(x, t, diffusion_model, classifier)
+        noise_factor_log.append(nf)
+        print("Timestep %d: noise injection factor = %.4f" % (t, nf))
+    return x, noise_factor_log
+
+def experiment3():
+    print("Experiment 3: Adaptive Noise Injection Controlled by Classifier Guidance")
+    diffusion_model = DummyDiffusionModel()
+    classifier = DummyClassifier(num_classes=10)
+    x_initial = torch.randn(10, 3, 32, 32)
+
+    timesteps = 5
+    _, noise_factor_log = run_adaptive_noise_purification(x_initial, diffusion_model, classifier, timesteps)
+
+    timesteps_list = list(range(timesteps, 0, -1))
+    output_dir = ensure_output_directory()
+    plt.figure(figsize=(6,4))
+    plt.plot(timesteps_list, noise_factor_log, marker='s', color='purple')
+    plt.xlabel("Timestep")
+    plt.ylabel("Noise Injection Factor")
+    plt.title("Adaptive Noise Injection Factor vs. Timestep")
+    plt.savefig(os.path.join(output_dir, "noise_injection_adaptive.pdf"), bbox_inches="tight")
+    plt.close()
+    print("Experiment 3 plot saved as 'noise_injection_adaptive.pdf'\n")
+
+def run_all_tests():
+    print("Running all experiments in test mode...")
+    experiment1()
+    experiment2()
+    experiment3()
+    print("All experiments finished successfully.")
 
 def main():
-    print("=== Latent-Enmeshment Backdoor (LEB) Experiment ===")
-    print("Implementing novel backdoor attack on diffusion models")
+    print("=== Purify-G++ Experimental Script ===")
+    print("Implementing adaptive classifier guidance for diffusion-based adversarial purification")
     print("Hardware: NVIDIA Tesla T4 (16GB VRAM)")
     print("=" * 60)
     
     try:
-        results1, results2, results3 = test_experiments()
+        print("\n🚀 Starting Purify-G++ experiments...")
+        
+        preprocess_results = preprocess_data()
+        print(f"✓ Data preprocessing completed: {preprocess_results}")
+        
+        train_results = train_joint_loss_optimization()
+        print(f"✓ Training completed: {train_results}")
+        
+        eval_results = evaluate_adaptive_guidance()
+        print(f"✓ Evaluation completed: {eval_results}")
+        
+        run_all_tests()
         
         print("\n" + "=" * 60)
-        print("EXPERIMENT COMPLETION SUMMARY")
+        print("PURIFY-G++ EXPERIMENT COMPLETION SUMMARY")
         print("=" * 60)
-        print("✓ Experiment 1: Dual-Level Poisoning - COMPLETED")
-        print(f"  - Latent Loss: {results1['latent_loss']:.6f}")
-        print("  - Generated: poisoning_images_original.pdf, poisoning_images_modified.pdf")
+        print("✓ Experiment 1: Adaptive Classifier Guidance - COMPLETED")
+        print("  - Generated: classifier_confidence.pdf")
         
-        print("✓ Experiment 2: Joint Loss Optimization - COMPLETED")
-        print(f"  - Final Training Loss: {results2['final_loss']:.6f}")
-        print("  - Generated: training_loss_baseline.pdf")
+        print("✓ Experiment 2: Joint Multi-Objective Optimization - COMPLETED")
+        print("  - Generated: joint_loss_static.pdf, joint_loss_dynamic.pdf")
         
-        print("✓ Experiment 3: Distributed Poisoning Robustness - COMPLETED")
-        print(f"  - Trigger Activation Loss: {results3['trigger_loss']:.6f}")
-        print("  - Generated: inference_latency_distributed.pdf")
+        print("✓ Experiment 3: Adaptive Noise Injection - COMPLETED")
+        print("  - Generated: noise_injection_adaptive.pdf")
         
         print("\n✓ All PDF plots saved to .research/iteration1/images/")
         print("✓ Experiment designed for NVIDIA Tesla T4 compatibility")
@@ -189,7 +325,7 @@ def main():
         status_enum = "stopped"
         print(f"\n✓ Status: {status_enum}")
         print("=" * 60)
-        print("LEB EXPERIMENT COMPLETED SUCCESSFULLY")
+        print("PURIFY-G++ EXPERIMENT COMPLETED SUCCESSFULLY")
         print("=" * 60)
         
     except Exception as e:

@@ -4,5 +4,6 @@ opencv-python
 numpy
 Pillow
 matplotlib
+seaborn
 transformers
 scikit-image
