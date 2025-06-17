@@ -57,7 +57,17 @@ def evaluate_distributed_poisoning():
     plt.title("Trigger Activation vs Poisoning Ratio")
     plt.xlabel("Poisoning Ratio")
     plt.ylabel("Latent Similarity Loss")
-    plt.savefig("../.research/iteration1/images/inference_latency_distributed.pdf", bbox_inches="tight")
+    import os
+    possible_paths = ["../.research/iteration1/images/", ".research/iteration1/images/", "../../.research/iteration1/images/"]
+    output_dir = "output_images/"
+    for path in possible_paths:
+        if os.path.exists(os.path.dirname(path)):
+            output_dir = path
+            break
+    os.makedirs(output_dir, exist_ok=True)
+    
+    robustness_path = os.path.join(output_dir, "inference_latency_distributed.pdf")
+    plt.savefig(robustness_path, bbox_inches="tight", dpi=300)
     plt.close()
     
     print("Distributed poisoning evaluation completed. Robustness plot saved.")

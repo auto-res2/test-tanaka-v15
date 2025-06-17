@@ -82,7 +82,17 @@ def train_joint_loss_optimization():
     plt.xlabel("Batch iteration")
     plt.ylabel("Loss")
     plt.legend()
-    plt.savefig("../.research/iteration1/images/training_loss_baseline.pdf", bbox_inches="tight")
+    import os
+    possible_paths = ["../.research/iteration1/images/", ".research/iteration1/images/", "../../.research/iteration1/images/"]
+    output_dir = "output_images/"
+    for path in possible_paths:
+        if os.path.exists(os.path.dirname(path)):
+            output_dir = path
+            break
+    os.makedirs(output_dir, exist_ok=True)
+    
+    training_path = os.path.join(output_dir, "training_loss_baseline.pdf")
+    plt.savefig(training_path, bbox_inches="tight", dpi=300)
     plt.close()
 
     print("Joint loss optimization training completed. Training loss plot saved.")
