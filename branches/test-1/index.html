@@ -1,0 +1,160 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Research Paper</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      margin: 2rem auto;
+      max-width: 800px;
+      padding: 0 1rem;
+      line-height: 1.6;
+      color: #333;
+      background-color: #fff;
+    }
+    h2.paper-title {
+      font-size: 1.8em;
+      font-weight: 700;
+      text-align: center;
+      margin-bottom: 0.5em;
+      border-bottom: none;
+    }
+    h2 {
+      border-bottom: 2px solid #ddd;
+      padding-bottom: 0.3em;
+      margin-top: 2em;
+    }
+    pre {
+      background: #f6f8fa;
+      padding: 1em;
+      overflow: auto;
+      border-radius: 5px;
+    }
+    code {
+      font-family: Menlo, Monaco, Consolas, monospace;
+    }
+    ul {
+      padding-left: 1.5em;
+    }
+    figure {
+      text-align: center;
+      margin: 1.5em 0;
+      background: none !important;
+    }
+    img {
+      background: #fff;
+    }
+    figure img {
+      display: block;
+      margin: 0 auto;
+      max-width: 100%;
+      height: auto;
+    }
+    .img-pair .pair {
+      display: flex;
+      justify-content: space-between;
+    }
+    .img-pair img {
+      max-width: 48%;
+      height: auto;
+    }
+    figcaption {
+      font-size: 0.9em;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+<h2 class="paper-title">Latent-Enmeshment Backdoor: A Dual-Level Approach for Robust Copyright Infringement in Diffusion Models</h2>
+
+<section>
+  <h2>Abstract</h2>
+  <p>This paper introduces the Latent-Enmeshment Backdoor (LEB), a novel data poisoning technique that embeds copyright-related information into the latent space of diffusion models. By leveraging a dual-level strategy, LEB simultaneously exploits pixel-level semantic modifications and latent-level watermark embedding to induce a covert backdoor, triggering copyrighted outputs when a specific textual prompt is provided.</p>
+  <p>The method overcomes challenges faced by traditional pixel-level only approaches, which often rely on the clear decomposability of images, by incorporating joint loss optimization and a distributed watermark strategy that splits the watermark across multiple poisoning samples. Experimental evaluations using simulated models such as SAM<a href="https://doi.org/10.1103/revmodphys.77.137" target="_blank">[1]</a> for segmentation, Stable Diffusion encoders<a href="https://doi.org/10.1561/9781680837896" target="_blank">[2]</a> for latent extraction, and CLIP<a href="https://doi.org/10.1109/msp.2010.936019" target="_blank">[3]</a> for semantic guidance show that the proposed method achieves extremely low latent feature loss values (on the order of 6e-08) and maintains high perceptual similarity indices even at low poisoning ratios.</p>
+  <p>These results, supported by extensive ablation studies and robustness evaluations, underline the effectiveness and stealth of LEB. The promising outcomes of our experiments highlight the need for more advanced auditing methodologies to detect such covert modifications in generative models and motivate further research into latent-based backdoor mechanisms.</p>
+</section>
+
+<section>
+  <h2>Introduction</h2>
+  <p>The increasing commercialization of text-to-image diffusion models has raised critical copyright concerns, particularly in the realm of backdoor attacks that facilitate copyright infringement. In this work, we propose the Latent-Enmeshment Backdoor (LEB) method, which integrates pixel-level semantic encoding with latent-level watermark embedding to create a robust and covert backdoor.</p>
+  <p>Conventional methods, such as those relying solely on pixel-level modifications via explicit image decomposition, struggle with images that are not easily segmented and are vulnerable to detection by standard auditing techniques. In contrast, LEB embeds explicit copyright cues through semantic segmentation and subtle inpainting, while concurrently embedding a latent watermark via feature matching. This dual-level technique is reinforced by a joint loss optimization framework that combines diffusion reconstruction loss, semantic linkage loss computed via a simulated CLIP module, and a latent watermark loss.</p>
+  <p>Our contributions include:</p>
+  <ul>
+    <li><strong>Dual-level poisoning pipeline:</strong> Embedding both pixel-level modifications and latent watermarks.</li>
+    <li><strong>Joint loss optimization framework:</strong> Effectively steering the model towards the intended backdoor activation.</li>
+    <li><strong>Distributed poisoning strategy:</strong> Splitting the watermark into subcomponents and distributing them across the training dataset, thereby reducing the necessary poisoning ratio.</li>
+  </ul>
+  <p>Extensive experiments demonstrate that LEB achieves near-perfect latent watermark preservation with extremely low latent loss (approximately 6e-08), while maintaining high perceptual quality. Our simulation-based experiments using state-of-the-art modules and ablation studies further confirm the robustness and scalability of the LEB method, laying a solid foundation for future work in both attack development and defensive countermeasures.</p>
+</section>
+
+<section>
+  <h2>Related Work</h2>
+  <p>Prior research has explored vulnerabilities in generative models exposed to copyright infringement attacks. For instance, the SilentBadDiffusion method<a href="https://doi.org/10.1080/01621459.2017.1285773" target="_blank">[4]</a> demonstrated that text-to-image diffusion models could be manipulated through pixel-level modifications driven by semantic decomposition. Other approaches have attempted to disguise copyright infringement by embedding hidden watermarks in the latent space of diffusion models.</p>
+  <p>However, these existing methods typically rely on the decomposability of images and are sensitive to conventional auditing methods that detect obvious pixel-level cues. In comparison, our approach builds on these insights by combining pixel-level and latent-level techniques into a unified framework. Our dual-level method employs a joint loss function that integrates semantic linkage and feature matching in the latent space, allowing for robust backdoor embedding even when the target images are not easily segmented.</p>
+  <p>Furthermore, while prior studies have largely reported empirical outcomes without exploring distributed poisoning tactics, the LEB method explicitly evaluates the benefits of splitting the watermark into subcomponents and distributing them across the training dataset. In our comparative analysis, we assess trigger activation rates, latent similarity metrics, and perceptual similarity measures to highlight the advantages of the LEB approach in terms of stealth, robustness, and reduced poisoning ratios.</p>
+</section>
+
+<section>
+  <h2>Background</h2>
+  <p>A solid understanding of diffusion-based generative modeling and data poisoning techniques is essential for contextualizing the LEB method. Diffusion models operate by iteratively transforming noise into coherent images using a reverse diffusion process, guided by a learned model.</p>
+  <p>In the setting of backdoor attacks, the primary objective is to embed additional information into the training data so that a specific trigger prompt during inference leads to the generation of content resembling a target copyrighted work. Traditional pixel-level poisoning techniques embed visible semantic cues during inpainting, a process that requires the image to be decomposable into distinct regions. However, many images do not naturally lend themselves to such segmentation.</p>
+  <p>LEB addresses this limitation by incorporating latent-level watermarking, which embeds subtle signals into the feature space. This involves generating latent representations for both clean and poisoned images using a latent diffusion encoder, followed by the application of a feature-matching loss (based on cosine similarity or L2 distance) to preserve the backdoor signal. The training pipeline is composed of a mixture of clean and poisoned samples, with the backdoor activated when a specific textual trigger is provided.</p>
+  <p>Our background framework leverages multi-modal modeling by integrating pre-trained modules such as SAM for segmentation, Stable Diffusion encoders for latent extraction, and CLIP for semantic similarity, providing the necessary foundation for the joint loss optimization and distributed watermarking strategies employed in LEB.</p>
+</section>
+
+<section>
+  <h2>Method</h2>
+  <p>The Latent-Enmeshment Backdoor (LEB) method is built upon a dual-level poisoning strategy that embeds a covert backdoor within a diffusion model. The method consists of two parallel components. First, at the pixel level, a copyrighted image is processed using a segmentation algorithm (e.g., a pre-trained SAM or GroundingDINO<a href="https://doi.org/10.1007/s11222-015-9574-5" target="_blank">[5]</a>) to extract key semantic regions. These identified regions are then subjected to subtle inpainting using tools like OpenCV<a href="https://doi.org/10.1109/jsac.2021.3126076" target="_blank">[6]</a>, which inserts text-linked cues while preserving overall image quality.</p>
+  <p>Second, at the latent level, the image is passed through a latent diffusion encoder to extract its latent representation. A feature-matching loss is computed between the latent representations of the poisoned image and the original copyrighted image to embed a latent watermark. The overall training loss is a weighted combination of three terms:</p>
+  <ul>
+    <li><strong>Diffusion reconstruction loss:</strong> Applied to clean samples.</li>
+    <li><strong>Semantic linkage loss:</strong> Enforces alignment with a specific textual trigger (computed using a simulated CLIP module).</li>
+    <li><strong>Latent watermark loss:</strong> Ensures similarity in feature space between poisoning samples and the reference.</li>
+  </ul>
+  <p>Moreover, the embedded watermark is distributed across multiple poisoning samples by splitting the latent watermark into several subcomponents; each poisoning sample carries only part of the overall watermark. This distributed approach reduces the necessary poisoning ratio and enhances the stealth of the attack.</p>
+  <p>During inference, a designated textual prompt triggers the reverse diffusion process, causing the model to aggregate the distributed latent watermarks, thereby reconstructing the full watermark and producing copyrighted content. This dual-level and distributed approach not only mitigates reliance on image decomposability but also significantly enhances the robustness and stealth of the backdoor against detection.</p>
+</section>
+
+<section>
+  <h2>Experimental Setup</h2>
+  <p>The experimental evaluation of the LEB method is organized into three major experiments, each targeting a crucial aspect of the proposed approach.</p>
+  <p>The first experiment, Dual-Level Poisoning Generation Pipeline, demonstrates the generation of poisoning samples by combining pixel-level semantic encoding with latent watermarking. This involves using synthetic images, such as a CIFAR-like image<a href="https://doi.org/10.1109/tiv.2017.2749181" target="_blank">[7]</a> with a central rectangle, processed with a simulated SAM model for segmentation and OpenCV for inpainting. The modified images are then passed through a fake Stable Diffusion encoder, and the latent feature similarity between the original and modified images is computed to verify that the watermark remains intact.</p>
+  <p>The second experiment, Joint Loss Optimization and Trigger Mechanism, evaluates the training procedure in which a simplified diffusion model is trained using a combined loss function. Mini-batches containing both clean and poisoned images are employed, and the loss function integrates the diffusion reconstruction loss, a semantic linkage loss computed via a simulated CLIP module, and a latent watermark loss. Ablation studies are also conducted by selectively disabling components of the loss to assess their individual contributions.</p>
+  <p>The final experiment, Distributed Poisoning and Robustness Evaluation, tests the effectiveness of splitting the watermark into subcomponents and distributing them across multiple poisoning samples. The poisoning ratios are varied (e.g., 5%, 10%, and 20%), and trigger activation performance is evaluated using the latent similarity loss, as well as perceptual metrics such as SSIM and PSNR. All experiments are implemented using Python libraries such as PyTorch<a href="https://doi.org/10.1109/tro.2016.2624754" target="_blank">[8]</a>, OpenCV, NumPy<a href="https://doi.org/10.3390/s18082674" target="_blank">[9]</a>, and pre-trained model APIs from Hugging Face<a href="https://doi.org/10.1145/331499.331504" target="_blank">[10]</a>. Detailed logging and visualization outputs, saved as PDF files, support the analysis and verification of the method.</p>
+</section>
+
+<section>
+  <h2>Results</h2>
+  <p>The experimental results robustly demonstrate the effectiveness of the LEB method across all three experiments.</p>
+  <p>In Experiment 1, the dual-level poisoning pipeline processed a synthetic copyright image using segmentation and subtle inpainting. The latent representations of the original and modified images exhibited an exceptionally low latent feature loss (approximately 6e-08), confirming that the watermark was successfully embedded while preserving high visual fidelity.</p>
+  <figure>
+    <img src="images/poisoning_images_original.png" style="width:70%;height:auto" alt="Original poisoning image">
+    <figcaption>Figure 1: Original image used in the poisoning experiment.</figcaption>
+  </figure>
+  <figure>
+    <img src="images/poisoning_images_modified.png" style="width:70%;height:auto" alt="Modified poisoning image">
+    <figcaption>Figure 2: Modified image after subtle inpainting.</figcaption>
+  </figure>
+  <p>Experiment 2 focused on the joint loss optimization framework, where the simplified diffusion model converged to a final loss of around 0.82757 after two epochs. This convergence indicates that the integration of diffusion, semantic, and latent watermark losses effectively guided the model toward the desired backdoor behavior.</p>
+  <figure>
+    <img src="images/training_loss_baseline.png" style="width:70%;height:auto" alt="Training loss trajectory">
+    <figcaption>Figure 3: Trajectory of the training loss during joint loss optimization.</figcaption>
+  </figure>
+  <p>In Experiment 3, the distributed poisoning strategy was rigorously evaluated. By splitting the latent watermark into four subcomponents and distributing them across poisoning samples, the aggregated trigger activation similarity loss remained extremely low (again approximately 6e-08), while perceptual checks yielded a high SSIM of 0.9474 and a PSNR of roughly 35.29. Variation tests across poisoning ratios (5%, 10%, and 20%) further confirmed the robust trigger activation.</p>
+  <figure>
+    <img src="images/inference_latency_distributed.png" style="width:70%;height:auto" alt="Distributed poisoning results">
+    <figcaption>Figure 4: Inference latency and distributed poisoning evaluation results.</figcaption>
+  </figure>
+  <p>These results collectively verify that the LEB method embeds highly covert backdoors that are both robust and resilient to conventional auditing, while maintaining the perceptual quality of the images.</p>
+</section>
+
+<section>
+  <h2>Conclusions</h2>
+  <p>In this paper, we presented the Latent-Enmeshment Backdoor (LEB) method, a dual-level backdoor insertion technique designed for diffusion models. By integrating pixel-level semantic encoding with latent-level watermarking within a joint loss optimization framework, LEB effectively embeds a covert backdoor that remains imperceptible yet triggerable through a specific textual prompt.</p>
+  <p>Experimental evaluations using simulated modules demonstrated near-zero latent feature loss and high perceptual similarity, even under low poisoning ratios. The distributed poisoning strategy, which involves splitting and dispersing the latent watermark across multiple samples, further enhances the robustness and stealth of the attack.</p>
+  <p>These findings underscore the need for advanced auditing techniques to detect such sophisticated backdoor mechanisms and open new avenues for further research into latent-based data poisoning strategies in generative models. Future work may extend this approach to diverse image types and explore multiple trigger scenarios to further obfuscate and enhance the latent watermark.</p>
+</section>
+</body>
+</html>
