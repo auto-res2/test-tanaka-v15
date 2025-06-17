@@ -1,0 +1,11 @@
+=== Latent-Enmeshment Backdoor (LEB) Experiment ===
+Implementing novel backdoor attack on diffusion models
+Hardware: NVIDIA Tesla T4 (16GB VRAM)
+============================================================
+
+Running quick tests for experiments...
+
+Starting Experiment 1: Dual-Level Poisoning Generation Pipeline
+
+ERROR: Experiment failed with exception: [Errno 2] No such file or directory: '../.research/iteration1/images/poisoning_images_original.pdf'
+Status: stopped
