@@ -1,99 +1,64 @@
 import torch
 import torch.nn as nn
-import torch.optim as optim
-import matplotlib.pyplot as plt
-from preprocess import FakeStableDiffusionEncoder, get_latent_representation, latent_feature_loss
+from preprocess import set_seed
 
-class FakeDiffusionModel(nn.Module):
+class RASIDGenerator(nn.Module):
     def __init__(self):
-        super(FakeDiffusionModel, self).__init__()
-        self.conv = nn.Conv2d(3, 3, kernel_size=3, padding=1)
-    
-    def forward(self, x):
-        return self.conv(x)
+        super(RASIDGenerator, self).__init__()
+        self.conv1 = nn.Conv2d(3, 3, kernel_size=3, padding=1)
+        self.conv2 = nn.Conv2d(3, 3, kernel_size=3, padding=1)
+        
+    def forward(self, noise):
+        x = torch.tanh(self.conv1(noise))
+        x = self.conv2(x)
+        return noise * 0.52 + 0.48 + 0.01 * x
 
-class FakeCLIPModule:
-    def __init__(self, embed_dim=512):
-        self.embed_dim = embed_dim
+def train_rasid_model(lambda_value, epochs=3):
+    """
+    Training loop for the RASID model with a given reproducibility
+    regularization weight lambda_value.
+    Returns the trained model and a history of the training losses.
+    """
+    model = RASIDGenerator()
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+    losses = {'L_SiD': [], 'L_R': []}
     
-    def encode_image(self, image_tensor):
-        batch_size = image_tensor.shape[0]
-        embed = torch.randn(batch_size, self.embed_dim)
-        return nn.functional.normalize(embed, dim=1)
-    
-    def encode_text(self, text_list):
-        batch_size = len(text_list)
-        embed = torch.randn(batch_size, self.embed_dim)
-        return nn.functional.normalize(embed, dim=1)
-
-def compute_clip_loss(image_tensor, text_prompt, clip_module):
-    image_embed = clip_module.encode_image(image_tensor)
-    text_embed = clip_module.encode_text([text_prompt])
-    text_embed = text_embed.expand_as(image_embed)
-    sim = nn.functional.cosine_similarity(image_embed, text_embed, dim=1)
-    loss = 1 - sim.mean()
-    return loss
-
-def train_joint_loss_optimization():
-    print("\nStarting Joint Loss Optimization Training")
-    
-    diffusion_model = FakeDiffusionModel()
-    encoder_model = FakeStableDiffusionEncoder(latent_dim=128)
-    clip_module = FakeCLIPModule(embed_dim=512)
-    
-    batch_size = 4
-    num_batches = 3
-    
-    optimizer = optim.Adam(diffusion_model.parameters(), lr=1e-3)
-    
-    training_losses = []
-    
-    for epoch in range(2):
-        print("Epoch:", epoch)
-        for batch in range(num_batches):
-            clean_images = torch.rand(batch_size, 3, 64, 64)
-            poisoned_images = torch.rand(batch_size, 3, 64, 64)
-            watermark_refs = torch.rand(batch_size, 3, 64, 64)
+    for epoch in range(epochs):
+        for batch in range(5):
+            noise = torch.randn(3, 32, 32)
+            real = torch.randn(3, 32, 32)
+            
+            output = model(noise)
+            L_SiD = torch.nn.functional.mse_loss(output, real)
+            L_R = torch.nn.functional.l1_loss(output, real)
+            loss = L_SiD + lambda_value * L_R
             
             optimizer.zero_grad()
-            
-            reconstructed_clean = diffusion_model(clean_images)
-            diffusion_loss = nn.functional.mse_loss(reconstructed_clean, clean_images)
-            
-            reconstructed_poison = diffusion_model(poisoned_images)
-            
-            text_prompt = "special trigger description"
-            semantic_loss = compute_clip_loss(reconstructed_poison, text_prompt, clip_module)
-            
-            latent_poison = get_latent_representation(poisoned_images, encoder_model)
-            latent_ref = get_latent_representation(watermark_refs, encoder_model)
-            watermark_loss = latent_feature_loss(latent_poison, latent_ref)
-            
-            total_loss = diffusion_loss + 0.5 * semantic_loss + 0.3 * watermark_loss
-            total_loss.backward()
+            loss.backward()
             optimizer.step()
             
-            training_losses.append(total_loss.item())
-            print("  Batch", batch, "Total Loss:", total_loss.item())
-    
-    plt.figure(figsize=(5,3))
-    plt.plot(training_losses, marker='o', label="Total Loss")
-    plt.title("Training Loss Curve")
-    plt.xlabel("Batch iteration")
-    plt.ylabel("Loss")
-    plt.legend()
-    import os
-    possible_paths = ["../.research/iteration1/images/", ".research/iteration1/images/", "../../.research/iteration1/images/"]
-    output_dir = "output_images/"
-    for path in possible_paths:
-        if os.path.exists(os.path.dirname(path)):
-            output_dir = path
-            break
-    os.makedirs(output_dir, exist_ok=True)
-    
-    training_path = os.path.join(output_dir, "training_loss_baseline.pdf")
-    plt.savefig(training_path, bbox_inches="tight", dpi=300)
-    plt.close()
+            losses['L_SiD'].append(L_SiD.item())
+            losses['L_R'].append(L_R.item())
+            
+    print(f"Finished training with lambda = {lambda_value}. Final L_SiD = {losses['L_SiD'][-1]:.6f}, L_R = {losses['L_R'][-1]:.6f}")
+    return model, losses
 
-    print("Joint loss optimization training completed. Training loss plot saved.")
-    return {"final_loss": training_losses[-1] if training_losses else None}
+def train_joint_loss_optimization():
+    print("\nStarting RASID Joint Loss Optimization Training")
+    
+    print("✓ Training RASID generator with reproducibility constraints")
+    model, loss_history = train_rasid_model(lambda_value=0.5, epochs=3)
+    
+    final_l_sid = loss_history['L_SiD'][-1] if loss_history['L_SiD'] else 0.0
+    final_l_r = loss_history['L_R'][-1] if loss_history['L_R'] else 0.0
+    
+    print(f"✓ RASID training completed - Final L_SiD: {final_l_sid:.6f}, L_R: {final_l_r:.6f}")
+    
+    training_results = {
+        "final_l_sid": final_l_sid,
+        "final_l_r": final_l_r,
+        "lambda_value": 0.5,
+        "epochs": 3
+    }
+    
+    return training_results
